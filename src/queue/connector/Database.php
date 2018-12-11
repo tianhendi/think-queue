@@ -17,7 +17,7 @@ use think\queue\job\Database as DatabaseJob;
 
 class Database extends Connector
 {
-
+    protected $db;
     protected $options = [
         'expire'  => 60,
         'default' => 'default',
@@ -29,6 +29,7 @@ class Database extends Connector
         if (!empty($options)) {
             $this->options = array_merge($this->options, $options);
         }
+        $this->db = Db::connect($this->options['dsn']);
     }
 
     public function push($job, $data = '', $queue = null)
@@ -52,12 +53,12 @@ class Database extends Connector
         if ($job = $this->getNextAvailableJob($queue)) {
             $this->markJobAsReserved($job->id);
 
-            Db::commit();
+            $this->db::commit();
 
             return new DatabaseJob($this, $job, $queue);
         }
 
-        Db::commit();
+        $this->db::commit();
     }
 
     /**
@@ -84,7 +85,7 @@ class Database extends Connector
      */
     protected function pushToDatabase($delay, $queue, $payload, $attempts = 0)
     {
-        return Db::name($this->options['table'])->insert([
+        return $this->db::name($this->options['table'])->insert([
             'queue'        => $this->getQueue($queue),
             'payload'      => $payload,
             'attempts'     => $attempts,
@@ -103,9 +104,9 @@ class Database extends Connector
      */
     protected function getNextAvailableJob($queue)
     {
-        Db::startTrans();
+        $this->db::startTrans();
 
-        $job = Db::name($this->options['table'])
+        $job = $this->db::name($this->options['table'])
             ->lock(true)
             ->where('queue', $this->getQueue($queue))
             ->where('reserved', 0)
@@ -124,7 +125,7 @@ class Database extends Connector
      */
     protected function markJobAsReserved($id)
     {
-        Db::name($this->options['table'])->where('id', $id)->update([
+        $this->db::name($this->options['table'])->where('id', $id)->update([
             'reserved'    => 1,
             'reserved_at' => time(),
         ]);
@@ -140,7 +141,7 @@ class Database extends Connector
     {
         $expired = time() - $this->options['expire'];
 
-        Db::name($this->options['table'])
+        $this->db::name($this->options['table'])
             ->where('queue', $this->getQueue($queue))
             ->where('reserved', 1)
             ->where('reserved_at', '<=', $expired)
@@ -159,7 +160,7 @@ class Database extends Connector
      */
     public function deleteReserved($id)
     {
-        Db::name($this->options['table'])->delete($id);
+        $this->db::name($this->options['table'])->delete($id);
     }
 
     protected function getQueue($queue)
